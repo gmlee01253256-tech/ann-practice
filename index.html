@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인공신경망 연비 예측 실습</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* 레이아웃: 지난 회귀 실습 사이트와 같은 모눈종이 바탕 + 왼쪽 설정 / 오른쪽 결과 2단 */
+  :root {
+    --ink: #1d2b44;
+    --muted: #5d6b82;
+    --paper: #f6f8fb;
+    --grid: #e3e8f0;
+    --panel: #ffffff;
+    --line: #d0d7e2;
+    --field: #ffffff;
+    --ann: #2b6cb0;
+    --lin: #d64545;
+    --val: #e8963a;
+    --good: #23845a;
+    --focus: #8fb3e6;
+    --node: #ffffff;
+    --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e4e9f2; --muted: #9aa7bc; --paper: #121826; --grid: #1c2435; --panel: #182033;
+      --line: #2e3a52; --field: #121a2a; --ann: #6ea8ef; --lin: #f07a7a; --val: #f0ae5c;
+      --good: #5cc795; --focus: #4d78b3; --node: #182033; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e4e9f2; --muted: #9aa7bc; --paper: #121826; --grid: #1c2435; --panel: #182033;
+    --line: #2e3a52; --field: #121a2a; --ann: #6ea8ef; --lin: #f07a7a; --val: #f0ae5c;
+    --good: #5cc795; --focus: #4d78b3; --node: #182033; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding-inline: 16px;
+    font-family: var(--font-body); color: var(--ink); line-height: 1.6;
+    background-color: var(--paper);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  header { max-width: 1180px; margin: 0 auto; padding-block: 36px 12px; }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; letter-spacing: -0.02em; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); max-width: 72ch; }
+  main {
+    max-width: 1180px; margin: 0 auto; padding-block: 16px 48px;
+    display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start;
+  }
+  @media (max-width: 880px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; }
+  h2 { font-size: 1.05rem; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  h2 small { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+  label { display: block; font-size: 0.88rem; font-weight: 500; margin: 12px 0 4px; }
+  .hint { font-size: 0.8rem; color: var(--muted); margin: 4px 0 0; }
+  textarea, input, select {
+    width: 100%; font: inherit; font-size: 0.92rem; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; background: var(--field);
+  }
+  textarea { height: 150px; resize: vertical; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; white-space: pre; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  button {
+    font: inherit; font-weight: 500; border-radius: 6px; padding: 8px 14px; cursor: pointer;
+    border: 1px solid var(--ink); background: var(--panel); color: var(--ink);
+  }
+  button:hover { background: var(--grid); }
+  button.primary { background: var(--ink); color: var(--panel); width: 100%; padding: 12px; font-size: 1rem; }
+  button.primary:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns button { flex: 1; font-size: 0.85rem; }
+  .run { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 16px; }
+  .msg { font-size: 0.85rem; margin: 10px 0 0; min-height: 1.2em; }
+  .msg.error { color: var(--lin); }
+  .chart-box { position: relative; height: 280px; }
+  .chart-box.tall { height: 340px; }
+  .status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
+  .pill.run { color: var(--ann); } .pill.stop { color: var(--val); } .pill.done { color: var(--good); } .pill.bad { color: var(--lin); }
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 0.82rem; }
+  td.win { font-weight: 700; }
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  #net { width: 100%; height: auto; display: block; }
+  #net text { font-family: var(--font-body); font-size: 11px; fill: var(--muted); }
+  .net-caption { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); margin: 6px 0 0; }
+  .pred-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0 12px; }
+  .pred-grid label { font-weight: 400; font-size: 0.82rem; color: var(--muted); margin-top: 8px; }
+  .pred-out { margin-top: 14px; display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; }
+  .pred-card { flex: 1 1 180px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; min-width: 0; }
+  .pred-card .k { font-size: 0.8rem; color: var(--muted); }
+  .pred-card .v { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .pred-card .u { font-size: 0.85rem; color: var(--muted); }
+  .pred-card.ann .v { color: var(--ann); }
+  .pred-card.lin .v { color: var(--lin); font-size: 1.25rem; }
+  footer { max-width: 1180px; margin: 0 auto; padding-block: 0 32px; font-size: 0.8rem; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<header>
+  <h1>인공신경망 연비 예측 실습</h1>
+  <p>데이터를 넣고 <b>학습 시작</b>을 누르면 다층 신경망(MLP)이 브라우저 안에서 순전파 → 역전파 → 경사하강법을 반복하며 학습합니다. 학습이 끝나면 다중 선형회귀와 성능을 비교하고, 새 값을 넣어 예측할 수 있습니다.</p>
+</header>
+
+<main>
+  <div class="col">
+    <section>
+      <h2>데이터 입력</h2>
+      <div class="btns" style="margin-top:0">
+        <button type="button" id="loadBtn">예제 불러오기 (Auto MPG)</button>
+        <button type="button" id="clearBtn">비우기</button>
+      </div>
+      <label for="data">CSV 데이터 (첫 줄은 열 이름)</label>
+      <textarea id="data" spellcheck="false"></textarea>
+      <p class="hint">쉼표나 탭으로 구분합니다. 글자로 된 열(예: 제조 지역)은 원-핫 인코딩으로 바꿔서 입력에 씁니다.</p>
+      <label for="target">예측할 열 (출력 y)</label>
+      <select id="target"></select>
+      <p class="msg" id="dataMsg"></p>
+    </section>
+
+    <section>
+      <h2>신경망 설정</h2>
+      <label for="hidden">은닉층 뉴런 수</label>
+      <input id="hidden" value="16, 8">
+      <p class="hint">쉼표로 층을 나눕니다. 예) <code>16, 8</code> = 은닉층 2개, <code>32</code> = 은닉층 1개</p>
+      <div class="row">
+        <div><label for="lr">학습률 η</label><input id="lr" type="number" step="0.001" min="0.0001" value="0.01"></div>
+        <div><label for="epochs">최대 epoch</label><input id="epochs" type="number" step="100" min="1" value="1000"></div>
+        <div><label for="batch">미니배치 크기</label><input id="batch" type="number" step="1" min="1" value="32"></div>
+        <div><label for="l2">L2 정규화 λ</label><input id="l2" type="number" step="0.0001" min="0" value="0.001"></div>
+        <div><label for="patience">조기 종료 (epoch)</label><input id="patience" type="number" step="10" min="1" value="100"></div>
+        <div><label for="seed">난수 시드</label><input id="seed" type="number" step="1" value="42"></div>
+      </div>
+      <label for="testRatio">테스트 데이터 비율</label>
+      <select id="testRatio">
+        <option value="0.2">20%</option>
+        <option value="0.3">30%</option>
+        <option value="0">사용 안 함 (검증 데이터로 평가)</option>
+      </select>
+      <div class="run">
+        <button type="button" class="primary" id="runBtn">학습 시작</button>
+        <button type="button" id="stopBtn" disabled>중지</button>
+      </div>
+      <p class="msg" id="runMsg"></p>
+    </section>
+
+    <section>
+      <h2>신경망 구조</h2>
+      <svg id="net" viewBox="0 0 300 200" role="img" aria-label="신경망 구조 그림"></svg>
+      <p class="net-caption" id="netCaption"></p>
+    </section>
+  </div>
+
+  <div class="col">
+    <section>
+      <h2>학습 손실 변화 <small class="status" id="status"></small></h2>
+      <div class="chart-box"><canvas id="lossChart"></canvas></div>
+      <p class="hint">표준화된 값 기준 MSE (로그 스케일). 검증 손실이 더 줄지 않으면 조기 종료하고, 검증 손실이 가장 낮았던 epoch의 가중치를 씁니다.</p>
+    </section>
+
+    <section>
+      <h2>성능 비교 <small id="evalNote"></small></h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>모델</th><th>R²</th><th>RMSE</th><th>MAE</th></tr></thead>
+          <tbody id="resultBody"><tr><td colspan="4" style="color:var(--muted);text-align:left">학습이 끝나면 결과가 나옵니다.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="hint">R²는 1에 가까울수록, RMSE와 MAE는 작을수록 정확합니다. 두 모델은 같은 학습·테스트 데이터를 씁니다.</p>
+    </section>
+
+    <section>
+      <h2>실제값 vs 예측값</h2>
+      <div class="chart-box tall"><canvas id="scatterChart"></canvas></div>
+      <p class="hint">점이 빨간 점선(y = x)에 가까울수록 정확한 예측입니다.</p>
+    </section>
+
+    <section>
+      <h2>값 예측하기</h2>
+      <form id="predForm">
+        <div class="pred-grid" id="predInputs"></div>
+        <button type="submit" style="margin-top:14px">예측</button>
+      </form>
+      <div class="pred-out" id="predOut"></div>
+    </section>
+  </div>
+</main>
+<footer>데이터: Quinlan, R. (1993). Auto MPG [Dataset]. UCI Machine Learning Repository. · 신경망과 그래프 모두 외부 라이브러리 없이 JavaScript로 직접 구현했습니다.</footer>
+
+<script type="text/plain" id="exampleData">cylinders,displacement,horsepower,weight,acceleration,model_year,origin,mpg
+8,307.0,130.0,3504,12.0,70,usa,18.0
+8,350.0,165.0,3693,11.5,70,usa,15.0
+8,318.0,150.0,3436,11.0,70,usa,18.0
+8,304.0,150.0,3433,12.0,70,usa,16.0
+8,302.0,140.0,3449,10.5,70,usa,17.0
+8,429.0,198.0,4341,10.0,70,usa,15.0
+8,454.0,220.0,4354,9.0,70,usa,14.0
+8,440.0,215.0,4312,8.5,70,usa,14.0
+8,455.0,225.0,4425,10.0,70,usa,14.0
+8,390.0,190.0,3850,8.5,70,usa,15.0
+8,383.0,170.0,3563,10.0,70,usa,15.0
+8,340.0,160.0,3609,8.0,70,usa,14.0
+8,400.0,150.0,3761,9.5,70,usa,15.0
+8,455.0,225.0,3086,10.0,70,usa,14.0
+4,113.0,95.0,2372,15.0,70,japan,24.0
+6,198.0,95.0,2833,15.5,70,usa,22.0
+6,199.0,97.0,2774,15.5,70,usa,18.0
+6,200.0,85.0,2587,16.0,70,usa,21.0
+4,97.0,88.0,2130,14.5,70,japan,27.0
+4,97.0,46.0,1835,20.5,70,europe,26.0
+4,110.0,87.0,2672,17.5,70,europe,25.0
+4,107.0,90.0,2430,14.5,70,europe,24.0
+4,104.0,95.0,2375,17.5,70,europe,25.0
+4,121.0,113.0,2234,12.5,70,europe,26.0
+6,199.0,90.0,2648,15.0,70,usa,21.0
+8,360.0,215.0,4615,14.0,70,usa,10.0
+8,307.0,200.0,4376,15.0,70,usa,10.0
+8,318.0,210.0,4382,13.5,70,usa,11.0
+8,304.0,193.0,4732,18.5,70,usa,9.0
+4,97.0,88.0,2130,14.5,71,japan,27.0
+4,140.0,90.0,2264,15.5,71,usa,28.0
+4,113.0,95.0,2228,14.0,71,japan,25.0
+6,232.0,100.0,2634,13.0,71,usa,19.0
+6,225.0,105.0,3439,15.5,71,usa,16.0
+6,250.0,100.0,3329,15.5,71,usa,17.0
+6,250.0,88.0,3302,15.5,71,usa,19.0
+6,232.0,100.0,3288,15.5,71,usa,18.0
+8,350.0,165.0,4209,12.0,71,usa,14.0
+8,400.0,175.0,4464,11.5,71,usa,14.0
+8,351.0,153.0,4154,13.5,71,usa,14.0
+8,318.0,150.0,4096,13.0,71,usa,14.0
+8,383.0,180.0,4955,11.5,71,usa,12.0
+8,400.0,170.0,4746,12.0,71,usa,13.0
+8,400.0,175.0,5140,12.0,71,usa,13.0
+6,258.0,110.0,2962,13.5,71,usa,18.0
+4,140.0,72.0,2408,19.0,71,usa,22.0
+6,250.0,100.0,3282,15.0,71,usa,19.0
+6,250.0,88.0,3139,14.5,71,usa,18.0
+4,122.0,86.0,2220,14.0,71,usa,23.0
+4,116.0,90.0,2123,14.0,71,europe,28.0
+4,79.0,70.0,2074,19.5,71,europe,30.0
+4,88.0,76.0,2065,14.5,71,europe,30.0
+4,71.0,65.0,1773,19.0,71,japan,31.0
+4,72.0,69.0,1613,18.0,71,japan,35.0
+4,97.0,60.0,1834,19.0,71,europe,27.0
+4,91.0,70.0,1955,20.5,71,usa,26.0
+4,113.0,95.0,2278,15.5,72,japan,24.0
+4,97.5,80.0,2126,17.0,72,usa,25.0
+4,97.0,54.0,2254,23.5,72,europe,23.0
+4,140.0,90.0,2408,19.5,72,usa,20.0
+4,122.0,86.0,2226,16.5,72,usa,21.0
+8,350.0,165.0,4274,12.0,72,usa,13.0
+8,400.0,175.0,4385,12.0,72,usa,14.0
+8,318.0,150.0,4135,13.5,72,usa,15.0
+8,351.0,153.0,4129,13.0,72,usa,14.0
+8,304.0,150.0,3672,11.5,72,usa,17.0
+8,429.0,208.0,4633,11.0,72,usa,11.0
+8,350.0,155.0,4502,13.5,72,usa,13.0
+8,350.0,160.0,4456,13.5,72,usa,12.0
+8,400.0,190.0,4422,12.5,72,usa,13.0
+3,70.0,97.0,2330,13.5,72,japan,19.0
+8,304.0,150.0,3892,12.5,72,usa,15.0
+8,307.0,130.0,4098,14.0,72,usa,13.0
+8,302.0,140.0,4294,16.0,72,usa,13.0
+8,318.0,150.0,4077,14.0,72,usa,14.0
+4,121.0,112.0,2933,14.5,72,europe,18.0
+4,121.0,76.0,2511,18.0,72,europe,22.0
+4,120.0,87.0,2979,19.5,72,europe,21.0
+4,96.0,69.0,2189,18.0,72,europe,26.0
+4,122.0,86.0,2395,16.0,72,usa,22.0
+4,97.0,92.0,2288,17.0,72,japan,28.0
+4,120.0,97.0,2506,14.5,72,japan,23.0
+4,98.0,80.0,2164,15.0,72,usa,28.0
+4,97.0,88.0,2100,16.5,72,japan,27.0
+8,350.0,175.0,4100,13.0,73,usa,13.0
+8,304.0,150.0,3672,11.5,73,usa,14.0
+8,350.0,145.0,3988,13.0,73,usa,13.0
+8,302.0,137.0,4042,14.5,73,usa,14.0
+8,318.0,150.0,3777,12.5,73,usa,15.0
+8,429.0,198.0,4952,11.5,73,usa,12.0
+8,400.0,150.0,4464,12.0,73,usa,13.0
+8,351.0,158.0,4363,13.0,73,usa,13.0
+8,318.0,150.0,4237,14.5,73,usa,14.0
+8,440.0,215.0,4735,11.0,73,usa,13.0
+8,455.0,225.0,4951,11.0,73,usa,12.0
+8,360.0,175.0,3821,11.0,73,usa,13.0
+6,225.0,105.0,3121,16.5,73,usa,18.0
+6,250.0,100.0,3278,18.0,73,usa,16.0
+6,232.0,100.0,2945,16.0,73,usa,18.0
+6,250.0,88.0,3021,16.5,73,usa,18.0
+6,198.0,95.0,2904,16.0,73,usa,23.0
+4,97.0,46.0,1950,21.0,73,europe,26.0
+8,400.0,150.0,4997,14.0,73,usa,11.0
+8,400.0,167.0,4906,12.5,73,usa,12.0
+8,360.0,170.0,4654,13.0,73,usa,13.0
+8,350.0,180.0,4499,12.5,73,usa,12.0
+6,232.0,100.0,2789,15.0,73,usa,18.0
+4,97.0,88.0,2279,19.0,73,japan,20.0
+4,140.0,72.0,2401,19.5,73,usa,21.0
+4,108.0,94.0,2379,16.5,73,japan,22.0
+3,70.0,90.0,2124,13.5,73,japan,18.0
+4,122.0,85.0,2310,18.5,73,usa,19.0
+6,155.0,107.0,2472,14.0,73,usa,21.0
+4,98.0,90.0,2265,15.5,73,europe,26.0
+8,350.0,145.0,4082,13.0,73,usa,15.0
+8,400.0,230.0,4278,9.5,73,usa,16.0
+4,68.0,49.0,1867,19.5,73,europe,29.0
+4,116.0,75.0,2158,15.5,73,europe,24.0
+4,114.0,91.0,2582,14.0,73,europe,20.0
+4,121.0,112.0,2868,15.5,73,europe,19.0
+8,318.0,150.0,3399,11.0,73,usa,15.0
+4,121.0,110.0,2660,14.0,73,europe,24.0
+6,156.0,122.0,2807,13.5,73,japan,20.0
+8,350.0,180.0,3664,11.0,73,usa,11.0
+6,198.0,95.0,3102,16.5,74,usa,20.0
+6,232.0,100.0,2901,16.0,74,usa,19.0
+6,250.0,100.0,3336,17.0,74,usa,15.0
+4,79.0,67.0,1950,19.0,74,japan,31.0
+4,122.0,80.0,2451,16.5,74,usa,26.0
+4,71.0,65.0,1836,21.0,74,japan,32.0
+4,140.0,75.0,2542,17.0,74,usa,25.0
+6,250.0,100.0,3781,17.0,74,usa,16.0
+6,258.0,110.0,3632,18.0,74,usa,16.0
+6,225.0,105.0,3613,16.5,74,usa,18.0
+8,302.0,140.0,4141,14.0,74,usa,16.0
+8,350.0,150.0,4699,14.5,74,usa,13.0
+8,318.0,150.0,4457,13.5,74,usa,14.0
+8,302.0,140.0,4638,16.0,74,usa,14.0
+8,304.0,150.0,4257,15.5,74,usa,14.0
+4,98.0,83.0,2219,16.5,74,europe,29.0
+4,79.0,67.0,1963,15.5,74,europe,26.0
+4,97.0,78.0,2300,14.5,74,europe,26.0
+4,76.0,52.0,1649,16.5,74,japan,31.0
+4,83.0,61.0,2003,19.0,74,japan,32.0
+4,90.0,75.0,2125,14.5,74,usa,28.0
+4,90.0,75.0,2108,15.5,74,europe,24.0
+4,116.0,75.0,2246,14.0,74,europe,26.0
+4,120.0,97.0,2489,15.0,74,japan,24.0
+4,108.0,93.0,2391,15.5,74,japan,26.0
+4,79.0,67.0,2000,16.0,74,europe,31.0
+6,225.0,95.0,3264,16.0,75,usa,19.0
+6,250.0,105.0,3459,16.0,75,usa,18.0
+6,250.0,72.0,3432,21.0,75,usa,15.0
+6,250.0,72.0,3158,19.5,75,usa,15.0
+8,400.0,170.0,4668,11.5,75,usa,16.0
+8,350.0,145.0,4440,14.0,75,usa,15.0
+8,318.0,150.0,4498,14.5,75,usa,16.0
+8,351.0,148.0,4657,13.5,75,usa,14.0
+6,231.0,110.0,3907,21.0,75,usa,17.0
+6,250.0,105.0,3897,18.5,75,usa,16.0
+6,258.0,110.0,3730,19.0,75,usa,15.0
+6,225.0,95.0,3785,19.0,75,usa,18.0
+6,231.0,110.0,3039,15.0,75,usa,21.0
+8,262.0,110.0,3221,13.5,75,usa,20.0
+8,302.0,129.0,3169,12.0,75,usa,13.0
+4,97.0,75.0,2171,16.0,75,japan,29.0
+4,140.0,83.0,2639,17.0,75,usa,23.0
+6,232.0,100.0,2914,16.0,75,usa,20.0
+4,140.0,78.0,2592,18.5,75,usa,23.0
+4,134.0,96.0,2702,13.5,75,japan,24.0
+4,90.0,71.0,2223,16.5,75,europe,25.0
+4,119.0,97.0,2545,17.0,75,japan,24.0
+6,171.0,97.0,2984,14.5,75,usa,18.0
+4,90.0,70.0,1937,14.0,75,europe,29.0
+6,232.0,90.0,3211,17.0,75,usa,19.0
+4,115.0,95.0,2694,15.0,75,europe,23.0
+4,120.0,88.0,2957,17.0,75,europe,23.0
+4,121.0,98.0,2945,14.5,75,europe,22.0
+4,121.0,115.0,2671,13.5,75,europe,25.0
+4,91.0,53.0,1795,17.5,75,japan,33.0
+4,107.0,86.0,2464,15.5,76,europe,28.0
+4,116.0,81.0,2220,16.9,76,europe,25.0
+4,140.0,92.0,2572,14.9,76,usa,25.0
+4,98.0,79.0,2255,17.7,76,usa,26.0
+4,101.0,83.0,2202,15.3,76,europe,27.0
+8,305.0,140.0,4215,13.0,76,usa,17.5
+8,318.0,150.0,4190,13.0,76,usa,16.0
+8,304.0,120.0,3962,13.9,76,usa,15.5
+8,351.0,152.0,4215,12.8,76,usa,14.5
+6,225.0,100.0,3233,15.4,76,usa,22.0
+6,250.0,105.0,3353,14.5,76,usa,22.0
+6,200.0,81.0,3012,17.6,76,usa,24.0
+6,232.0,90.0,3085,17.6,76,usa,22.5
+4,85.0,52.0,2035,22.2,76,usa,29.0
+4,98.0,60.0,2164,22.1,76,usa,24.5
+4,90.0,70.0,1937,14.2,76,europe,29.0
+4,91.0,53.0,1795,17.4,76,japan,33.0
+6,225.0,100.0,3651,17.7,76,usa,20.0
+6,250.0,78.0,3574,21.0,76,usa,18.0
+6,250.0,110.0,3645,16.2,76,usa,18.5
+6,258.0,95.0,3193,17.8,76,usa,17.5
+4,97.0,71.0,1825,12.2,76,europe,29.5
+4,85.0,70.0,1990,17.0,76,japan,32.0
+4,97.0,75.0,2155,16.4,76,japan,28.0
+4,140.0,72.0,2565,13.6,76,usa,26.5
+4,130.0,102.0,3150,15.7,76,europe,20.0
+8,318.0,150.0,3940,13.2,76,usa,13.0
+4,120.0,88.0,3270,21.9,76,europe,19.0
+6,156.0,108.0,2930,15.5,76,japan,19.0
+6,168.0,120.0,3820,16.7,76,europe,16.5
+8,350.0,180.0,4380,12.1,76,usa,16.5
+8,350.0,145.0,4055,12.0,76,usa,13.0
+8,302.0,130.0,3870,15.0,76,usa,13.0
+8,318.0,150.0,3755,14.0,76,usa,13.0
+4,98.0,68.0,2045,18.5,77,japan,31.5
+4,111.0,80.0,2155,14.8,77,usa,30.0
+4,79.0,58.0,1825,18.6,77,europe,36.0
+4,122.0,96.0,2300,15.5,77,usa,25.5
+4,85.0,70.0,1945,16.8,77,japan,33.5
+8,305.0,145.0,3880,12.5,77,usa,17.5
+8,260.0,110.0,4060,19.0,77,usa,17.0
+8,318.0,145.0,4140,13.7,77,usa,15.5
+8,302.0,130.0,4295,14.9,77,usa,15.0
+6,250.0,110.0,3520,16.4,77,usa,17.5
+6,231.0,105.0,3425,16.9,77,usa,20.5
+6,225.0,100.0,3630,17.7,77,usa,19.0
+6,250.0,98.0,3525,19.0,77,usa,18.5
+8,400.0,180.0,4220,11.1,77,usa,16.0
+8,350.0,170.0,4165,11.4,77,usa,15.5
+8,400.0,190.0,4325,12.2,77,usa,15.5
+8,351.0,149.0,4335,14.5,77,usa,16.0
+4,97.0,78.0,1940,14.5,77,europe,29.0
+4,151.0,88.0,2740,16.0,77,usa,24.5
+4,97.0,75.0,2265,18.2,77,japan,26.0
+4,140.0,89.0,2755,15.8,77,usa,25.5
+4,98.0,63.0,2051,17.0,77,usa,30.5
+4,98.0,83.0,2075,15.9,77,usa,33.5
+4,97.0,67.0,1985,16.4,77,japan,30.0
+4,97.0,78.0,2190,14.1,77,europe,30.5
+6,146.0,97.0,2815,14.5,77,japan,22.0
+4,121.0,110.0,2600,12.8,77,europe,21.5
+3,80.0,110.0,2720,13.5,77,japan,21.5
+4,90.0,48.0,1985,21.5,78,europe,43.1
+4,98.0,66.0,1800,14.4,78,usa,36.1
+4,78.0,52.0,1985,19.4,78,japan,32.8
+4,85.0,70.0,2070,18.6,78,japan,39.4
+4,91.0,60.0,1800,16.4,78,japan,36.1
+8,260.0,110.0,3365,15.5,78,usa,19.9
+8,318.0,140.0,3735,13.2,78,usa,19.4
+8,302.0,139.0,3570,12.8,78,usa,20.2
+6,231.0,105.0,3535,19.2,78,usa,19.2
+6,200.0,95.0,3155,18.2,78,usa,20.5
+6,200.0,85.0,2965,15.8,78,usa,20.2
+4,140.0,88.0,2720,15.4,78,usa,25.1
+6,225.0,100.0,3430,17.2,78,usa,20.5
+6,232.0,90.0,3210,17.2,78,usa,19.4
+6,231.0,105.0,3380,15.8,78,usa,20.6
+6,200.0,85.0,3070,16.7,78,usa,20.8
+6,225.0,110.0,3620,18.7,78,usa,18.6
+6,258.0,120.0,3410,15.1,78,usa,18.1
+8,305.0,145.0,3425,13.2,78,usa,19.2
+6,231.0,165.0,3445,13.4,78,usa,17.7
+8,302.0,139.0,3205,11.2,78,usa,18.1
+8,318.0,140.0,4080,13.7,78,usa,17.5
+4,98.0,68.0,2155,16.5,78,usa,30.0
+4,134.0,95.0,2560,14.2,78,japan,27.5
+4,119.0,97.0,2300,14.7,78,japan,27.2
+4,105.0,75.0,2230,14.5,78,usa,30.9
+4,134.0,95.0,2515,14.8,78,japan,21.1
+4,156.0,105.0,2745,16.7,78,usa,23.2
+4,151.0,85.0,2855,17.6,78,usa,23.8
+4,119.0,97.0,2405,14.9,78,japan,23.9
+5,131.0,103.0,2830,15.9,78,europe,20.3
+6,163.0,125.0,3140,13.6,78,europe,17.0
+4,121.0,115.0,2795,15.7,78,europe,21.6
+6,163.0,133.0,3410,15.8,78,europe,16.2
+4,89.0,71.0,1990,14.9,78,europe,31.5
+4,98.0,68.0,2135,16.6,78,japan,29.5
+6,231.0,115.0,3245,15.4,79,usa,21.5
+6,200.0,85.0,2990,18.2,79,usa,19.8
+4,140.0,88.0,2890,17.3,79,usa,22.3
+6,232.0,90.0,3265,18.2,79,usa,20.2
+6,225.0,110.0,3360,16.6,79,usa,20.6
+8,305.0,130.0,3840,15.4,79,usa,17.0
+8,302.0,129.0,3725,13.4,79,usa,17.6
+8,351.0,138.0,3955,13.2,79,usa,16.5
+8,318.0,135.0,3830,15.2,79,usa,18.2
+8,350.0,155.0,4360,14.9,79,usa,16.9
+8,351.0,142.0,4054,14.3,79,usa,15.5
+8,267.0,125.0,3605,15.0,79,usa,19.2
+8,360.0,150.0,3940,13.0,79,usa,18.5
+4,89.0,71.0,1925,14.0,79,europe,31.9
+4,86.0,65.0,1975,15.2,79,japan,34.1
+4,98.0,80.0,1915,14.4,79,usa,35.7
+4,121.0,80.0,2670,15.0,79,usa,27.4
+5,183.0,77.0,3530,20.1,79,europe,25.4
+8,350.0,125.0,3900,17.4,79,usa,23.0
+4,141.0,71.0,3190,24.8,79,europe,27.2
+8,260.0,90.0,3420,22.2,79,usa,23.9
+4,105.0,70.0,2200,13.2,79,usa,34.2
+4,105.0,70.0,2150,14.9,79,usa,34.5
+4,85.0,65.0,2020,19.2,79,japan,31.8
+4,91.0,69.0,2130,14.7,79,europe,37.3
+4,151.0,90.0,2670,16.0,79,usa,28.4
+6,173.0,115.0,2595,11.3,79,usa,28.8
+6,173.0,115.0,2700,12.9,79,usa,26.8
+4,151.0,90.0,2556,13.2,79,usa,33.5
+4,98.0,76.0,2144,14.7,80,europe,41.5
+4,89.0,60.0,1968,18.8,80,japan,38.1
+4,98.0,70.0,2120,15.5,80,usa,32.1
+4,86.0,65.0,2019,16.4,80,japan,37.2
+4,151.0,90.0,2678,16.5,80,usa,28.0
+4,140.0,88.0,2870,18.1,80,usa,26.4
+4,151.0,90.0,3003,20.1,80,usa,24.3
+6,225.0,90.0,3381,18.7,80,usa,19.1
+4,97.0,78.0,2188,15.8,80,europe,34.3
+4,134.0,90.0,2711,15.5,80,japan,29.8
+4,120.0,75.0,2542,17.5,80,japan,31.3
+4,119.0,92.0,2434,15.0,80,japan,37.0
+4,108.0,75.0,2265,15.2,80,japan,32.2
+4,86.0,65.0,2110,17.9,80,japan,46.6
+4,156.0,105.0,2800,14.4,80,usa,27.9
+4,85.0,65.0,2110,19.2,80,japan,40.8
+4,90.0,48.0,2085,21.7,80,europe,44.3
+4,90.0,48.0,2335,23.7,80,europe,43.4
+5,121.0,67.0,2950,19.9,80,europe,36.4
+4,146.0,67.0,3250,21.8,80,europe,30.0
+4,91.0,67.0,1850,13.8,80,japan,44.6
+4,97.0,67.0,2145,18.0,80,japan,33.8
+4,89.0,62.0,1845,15.3,80,europe,29.8
+6,168.0,132.0,2910,11.4,80,japan,32.7
+3,70.0,100.0,2420,12.5,80,japan,23.7
+4,122.0,88.0,2500,15.1,80,europe,35.0
+4,107.0,72.0,2290,17.0,80,japan,32.4
+4,135.0,84.0,2490,15.7,81,usa,27.2
+4,151.0,84.0,2635,16.4,81,usa,26.6
+4,156.0,92.0,2620,14.4,81,usa,25.8
+6,173.0,110.0,2725,12.6,81,usa,23.5
+4,135.0,84.0,2385,12.9,81,usa,30.0
+4,79.0,58.0,1755,16.9,81,japan,39.1
+4,86.0,64.0,1875,16.4,81,usa,39.0
+4,81.0,60.0,1760,16.1,81,japan,35.1
+4,97.0,67.0,2065,17.8,81,japan,32.3
+4,85.0,65.0,1975,19.4,81,japan,37.0
+4,89.0,62.0,2050,17.3,81,japan,37.7
+4,91.0,68.0,1985,16.0,81,japan,34.1
+4,105.0,63.0,2215,14.9,81,usa,34.7
+4,98.0,65.0,2045,16.2,81,usa,34.4
+4,98.0,65.0,2380,20.7,81,usa,29.9
+4,105.0,74.0,2190,14.2,81,europe,33.0
+4,107.0,75.0,2210,14.4,81,japan,33.7
+4,108.0,75.0,2350,16.8,81,japan,32.4
+4,119.0,100.0,2615,14.8,81,japan,32.9
+4,120.0,74.0,2635,18.3,81,japan,31.6
+4,141.0,80.0,3230,20.4,81,europe,28.1
+6,145.0,76.0,3160,19.6,81,europe,30.7
+6,168.0,116.0,2900,12.6,81,japan,25.4
+6,146.0,120.0,2930,13.8,81,japan,24.2
+6,231.0,110.0,3415,15.8,81,usa,22.4
+8,350.0,105.0,3725,19.0,81,usa,26.6
+6,200.0,88.0,3060,17.1,81,usa,20.2
+6,225.0,85.0,3465,16.6,81,usa,17.6
+4,112.0,88.0,2605,19.6,82,usa,28.0
+4,112.0,88.0,2640,18.6,82,usa,27.0
+4,112.0,88.0,2395,18.0,82,usa,34.0
+4,112.0,85.0,2575,16.2,82,usa,31.0
+4,135.0,84.0,2525,16.0,82,usa,29.0
+4,151.0,90.0,2735,18.0,82,usa,27.0
+4,140.0,92.0,2865,16.4,82,usa,24.0
+4,105.0,74.0,1980,15.3,82,europe,36.0
+4,91.0,68.0,2025,18.2,82,japan,37.0
+4,91.0,68.0,1970,17.6,82,japan,31.0
+4,105.0,63.0,2125,14.7,82,usa,38.0
+4,98.0,70.0,2125,17.3,82,usa,36.0
+4,120.0,88.0,2160,14.5,82,japan,36.0
+4,107.0,75.0,2205,14.5,82,japan,36.0
+4,108.0,70.0,2245,16.9,82,japan,34.0
+4,91.0,67.0,1965,15.0,82,japan,38.0
+4,91.0,67.0,1965,15.7,82,japan,32.0
+4,91.0,67.0,1995,16.2,82,japan,38.0
+6,181.0,110.0,2945,16.4,82,usa,25.0
+6,262.0,85.0,3015,17.0,82,usa,38.0
+4,156.0,92.0,2585,14.5,82,usa,26.0
+6,232.0,112.0,2835,14.7,82,usa,22.0
+4,144.0,96.0,2665,13.9,82,japan,32.0
+4,135.0,84.0,2370,13.0,82,usa,36.0
+4,151.0,90.0,2950,17.3,82,usa,27.0
+4,140.0,86.0,2790,15.6,82,usa,27.0
+4,97.0,52.0,2130,24.6,82,europe,44.0
+4,135.0,84.0,2295,11.6,82,usa,32.0
+4,120.0,79.0,2625,18.6,82,usa,28.0
+4,119.0,82.0,2720,19.4,82,usa,31.0</script>
+<script>
+/* ===== 인공신경망 핵심 코드 (Python ann_predict.py 와 같은 알고리즘) ===== */
+
+/* 시드 고정 난수: 실행할 때마다 같은 결과가 나오게 함 */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gaussFrom(rand) {            /* 표준정규분포 난수 (Box-Muller) */
+  return () => {
+    let u = 0; while (u === 0) u = rand();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+}
+function shuffled(n, rand) {
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+  return idx;
+}
+
+/* ---------- 데이터 읽기 ---------- */
+function parseTable(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+  if (lines.length < 2) return { error: "첫 줄에 열 이름, 그 아래에 데이터를 2줄 이상 넣어 주세요." };
+  const sep = lines[0].includes(",") ? "," : (lines[0].includes("\t") ? "\t" : /\s+/);
+  const header = lines[0].split(sep).map(s => s.trim());
+  const rows = [];
+  let bad = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(sep).map(s => s.trim());
+    if (c.length !== header.length) { bad++; continue; }
+    rows.push(c);
+  }
+  const missing = v => v === "" || v === "?" || v.toLowerCase() === "na" || v.toLowerCase() === "nan";
+  const cols = header.map((name, j) => {
+    const vals = rows.map(r => r[j]).filter(v => !missing(v));
+    const numeric = vals.length > 0 && vals.every(v => isFinite(Number(v)));
+    const cats = numeric ? null : [...new Set(vals)].sort();
+    return { name, numeric, cats };
+  });
+  return { header, rows, cols, bad, missing };
+}
+
+/* 표 → 입력 행렬 X, 출력 y.  글자 열은 원-핫 인코딩, 종류가 너무 많은 글자 열(이름 등)은 제외 */
+function buildDesign(table, target) {
+  const ti = table.header.indexOf(target);
+  if (ti < 0 || !table.cols[ti].numeric) return { error: "예측할 열은 숫자 열이어야 합니다." };
+  const spec = [], skipped = [];
+  table.cols.forEach((c, j) => {
+    if (j === ti) return;
+    if (c.numeric) spec.push({ name: c.name, j, type: "num" });
+    else if (c.cats.length <= 12) spec.push({ name: c.name, j, type: "cat", cats: c.cats });
+    else skipped.push(c.name);
+  });
+  if (!spec.length) return { error: "입력으로 쓸 수 있는 열이 없습니다." };
+  const X = [], y = [];
+  let dropped = 0;
+  for (const r of table.rows) {
+    if (table.missing(r[ti]) || spec.some(s => table.missing(r[s.j]))) { dropped++; continue; }
+    X.push(encode(spec, spec.map(s => r[s.j])));
+    y.push(Number(r[ti]));
+  }
+  spec.forEach(s => {                       /* 예측 입력창 기본값: 숫자는 중앙값, 글자는 최빈값 */
+    const v = table.rows.map(r => r[s.j]).filter(v => !table.missing(v));
+    if (s.type === "num") { const a = v.map(Number).sort((p, q) => p - q); s.def = a[Math.floor(a.length / 2)]; s.min = a[0]; s.max = a[a.length - 1]; }
+    else { const cnt = {}; v.forEach(x => cnt[x] = (cnt[x] || 0) + 1); s.def = Object.keys(cnt).sort((p, q) => cnt[q] - cnt[p])[0]; }
+  });
+  return { X, y, spec, skipped, dropped, nIn: X[0] ? X[0].length : 0 };
+}
+function encode(spec, values) {
+  const out = [];
+  spec.forEach((s, k) => {
+    if (s.type === "num") out.push(Number(values[k]));
+    else s.cats.forEach(c => out.push(values[k] === c ? 1 : 0));   /* 원-핫 */
+  });
+  return out;
+}
+
+/* ---------- 표준화 ---------- */
+function fitScaler(X) {
+  const d = X[0].length, n = X.length;
+  const mu = new Array(d).fill(0), sd = new Array(d).fill(0);
+  X.forEach(r => r.forEach((v, j) => mu[j] += v / n));
+  X.forEach(r => r.forEach((v, j) => sd[j] += (v - mu[j]) ** 2 / n));
+  return { mu, sd: sd.map(s => Math.sqrt(s) || 1) };
+}
+const scale = (X, s) => X.map(r => r.map((v, j) => (v - s.mu[j]) / s.sd[j]));
+
+/* ---------- 다층 퍼셉트론 ---------- */
+class MLP {
+  constructor(sizes, gauss) {
+    this.sizes = sizes;
+    /* He 초기화: 분산 2/n_in */
+    this.W = sizes.slice(1).map((b, l) => {
+      const a = sizes[l], s = Math.sqrt(2 / a);
+      return Array.from({ length: a }, () => Array.from({ length: b }, () => gauss() * s));
+    });
+    this.b = sizes.slice(1).map(b => new Array(b).fill(0));
+  }
+  /* 순전파: Z = A·W + b,  A = ReLU(Z)  (마지막 층은 항등 함수) */
+  forward(X) {
+    const L = this.W.length;
+    this.A = [X]; this.Z = [];
+    for (let l = 0; l < L; l++) {
+      const W = this.W[l], b = this.b[l], prev = this.A[l], nOut = b.length;
+      const Z = prev.map(row => {
+        const z = b.slice();
+        for (let i = 0; i < row.length; i++) { const x = row[i]; if (x === 0) continue; const Wi = W[i]; for (let k = 0; k < nOut; k++) z[k] += x * Wi[k]; }
+        return z;
+      });
+      this.Z.push(Z);
+      this.A.push(l === L - 1 ? Z : Z.map(z => z.map(v => v > 0 ? v : 0)));
+    }
+    return this.A[L];
+  }
+  /* 역전파 + 경사하강법 */
+  backward(y, lr, l2) {
+    const L = this.W.length, m = y.length;
+    let delta = this.A[L].map((p, i) => [2 * (p[0] - y[i]) / m]);       /* δ = 2(ŷ−y)/m */
+    for (let l = L - 1; l >= 0; l--) {
+      const W = this.W[l], A = this.A[l], nIn = W.length, nOut = this.b[l].length;
+      const dW = Array.from({ length: nIn }, (_, i) => W[i].map(w => l2 * w));   /* λW */
+      const db = new Array(nOut).fill(0);
+      for (let r = 0; r < m; r++) {
+        const a = A[r], d = delta[r];
+        for (let k = 0; k < nOut; k++) db[k] += d[k];
+        for (let i = 0; i < nIn; i++) { const ai = a[i]; if (ai === 0) continue; for (let k = 0; k < nOut; k++) dW[i][k] += ai * d[k]; }   /* Aᵀ·δ */
+      }
+      if (l > 0) {                                            /* δ_prev = (δ·Wᵀ) ⊙ ReLU'(Z_prev) */
+        const Zp = this.Z[l - 1];
+        delta = delta.map((d, r) => W.map((Wi, i) => {
+          if (Zp[r][i] <= 0) return 0;
+          let s = 0; for (let k = 0; k < nOut; k++) s += d[k] * Wi[k]; return s;
+        }));
+      }
+      for (let i = 0; i < nIn; i++) for (let k = 0; k < nOut; k++) W[i][k] -= lr * dW[i][k];
+      for (let k = 0; k < nOut; k++) this.b[l][k] -= lr * db[k];
+    }
+  }
+  predict(X) { return this.forward(X).map(p => p[0]); }
+  get() { return { W: this.W.map(M => M.map(r => r.slice())), b: this.b.map(v => v.slice()) }; }
+  set(p) { this.W = p.W; this.b = p.b; }
+}
+
+/* ---------- 비교용 다중 선형회귀 (정규방정식, 아주 작은 릿지로 원-핫 중복 처리) ---------- */
+function linearFit(X, y) {
+  const n = X.length, d = X[0].length + 1;
+  const Xa = X.map(r => [1, ...r]);
+  const A = Array.from({ length: d }, () => new Array(d).fill(0)), v = new Array(d).fill(0);
+  for (let r = 0; r < n; r++) for (let i = 0; i < d; i++) { v[i] += Xa[r][i] * y[r]; for (let j = 0; j < d; j++) A[i][j] += Xa[r][i] * Xa[r][j]; }
+  for (let i = 1; i < d; i++) A[i][i] += 1e-6 * n;
+  for (let c = 0; c < d; c++) {                    /* 가우스 소거법 */
+    let p = c; for (let r = c + 1; r < d; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [v[c], v[p]] = [v[p], v[c]];
+    for (let r = 0; r < d; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let j = c; j < d; j++) A[r][j] -= f * A[c][j]; v[r] -= f * v[c]; }
+  }
+  const w = v.map((s, i) => s / A[i][i]);
+  return x => w[0] + x.reduce((s, xi, i) => s + xi * w[i + 1], 0);
+}
+
+/* ---------- 평가 지표 ---------- */
+const meanOf = a => a.reduce((s, v) => s + v, 0) / a.length;
+function metrics(t, p) {
+  const m = meanOf(t);
+  const ssRes = t.reduce((s, v, i) => s + (v - p[i]) ** 2, 0), ssTot = t.reduce((s, v) => s + (v - m) ** 2, 0);
+  return { r2: 1 - ssRes / ssTot, rmse: Math.sqrt(ssRes / t.length), mae: meanOf(t.map((v, i) => Math.abs(v - p[i]))) };
+}
+
+/* ---------- 학습 준비: 분할 → 표준화 → 모델 생성 ---------- */
+function prepare(design, cfg) {
+  const rand = mulberry32(cfg.seed), gauss = gaussFrom(rand);
+  const n = design.X.length, idx = shuffled(n, rand);
+  const nTest = Math.floor(n * cfg.testRatio);
+  const rest = idx.slice(nTest), nVal = Math.max(1, Math.floor(rest.length * 0.15));
+  const te = idx.slice(0, nTest), va = rest.slice(0, nVal), tr = rest.slice(nVal);
+  const pick = (ids, A) => ids.map(i => A[i]);
+  const xs = fitScaler(pick(tr, design.X));
+  const yTr = pick(tr, design.y), yMu = meanOf(yTr), ySd = Math.sqrt(meanOf(yTr.map(v => (v - yMu) ** 2))) || 1;
+  const ny = v => (v - yMu) / ySd;
+  const S = {
+    cfg, rand, xs, yMu, ySd,
+    Xtr: scale(pick(tr, design.X), xs), ytr: yTr.map(ny),
+    Xva: scale(pick(va, design.X), xs), yva: pick(va, design.y).map(ny),
+    Xte: scale(pick(te, design.X), xs), yte: pick(te, design.y),
+    model: new MLP([design.nIn, ...cfg.hidden, 1], gauss),
+    epoch: 0, best: Infinity, bestEpoch: 0, bestP: null, wait: 0, hTr: [], hVa: [], done: false
+  };
+  return S;
+}
+const mseOf = (p, t) => meanOf(p.map((v, i) => (v - t[i]) ** 2));
+
+/* 한 epoch 학습: 미니배치마다 순전파 → 역전파 */
+function runEpoch(S) {
+  const { model, cfg } = S;
+  const perm = shuffled(S.Xtr.length, S.rand);
+  for (let s = 0; s < perm.length; s += cfg.batch) {
+    const b = perm.slice(s, s + cfg.batch);
+    model.forward(b.map(i => S.Xtr[i]));
+    model.backward(b.map(i => S.ytr[i]), cfg.lr, cfg.l2);
+  }
+  S.epoch++;
+  const lTr = mseOf(model.predict(S.Xtr), S.ytr), lVa = mseOf(model.predict(S.Xva), S.yva);
+  S.hTr.push(lTr); S.hVa.push(lVa);
+  if (!isFinite(lTr)) { S.done = true; S.diverged = true; return; }
+  if (lVa < S.best) { S.best = lVa; S.bestEpoch = S.epoch; S.bestP = model.get(); S.wait = 0; }   /* 최고 기록 저장 */
+  else if (++S.wait >= cfg.patience) { S.done = true; S.stoppedEarly = true; }                     /* 조기 종료 */
+  if (S.epoch >= cfg.epochs) S.done = true;
+}
+
+/* 학습이 끝난 뒤: 최적 가중치로 되돌리고 테스트 평가 */
+function finish(S) {
+  if (S.bestP) S.model.set(S.bestP);
+  const back = v => v * S.ySd + S.yMu;
+  const lin = linearFit(S.Xtr, S.ytr);
+  const evalX = S.Xte.length ? S.Xte : S.Xva, evalY = S.Xte.length ? S.yte : S.yva.map(back);
+  const annP = S.model.predict(evalX).map(back), linP = evalX.map(x => back(lin(x)));
+  S.result = { ann: metrics(evalY, annP), lin: metrics(evalY, linP), truth: evalY, annP, linP, onTest: S.Xte.length > 0 };
+  S.predictOne = raw => {
+    const x = raw.map((v, j) => (v - S.xs.mu[j]) / S.xs.sd[j]);
+    return { ann: back(S.model.predict([x])[0]), lin: back(lin(x)) };
+  };
+  return S.result;
+}
+
+
+/* ===== 간단한 캔버스 그래프 (외부 라이브러리 없이 직접 그림) ===== */
+function niceTicks(lo, hi, count) {
+  if (hi === lo) { hi = lo + 1; }
+  const raw = (hi - lo) / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function logTicks(lo, hi) {
+  const out = [];
+  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++)
+    [1, 2, 5].forEach(m => { const v = m * Math.pow(10, e); if (v >= lo * 0.999 && v <= hi * 1.001) out.push(v); });
+  return out;
+}
+const tickText = v => Math.abs(v) >= 1000 ? v.toLocaleString() : (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(0) : String(+v.toPrecision(3)));
+
+function plot(canvas, opt) {
+  const box = canvas.parentElement, dpr = window.devicePixelRatio || 1;
+  const W = box.clientWidth, H = box.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  const g = canvas.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const C = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const font = C("--font-body"), muted = C("--muted"), line = C("--line");
+  const pts = opt.series.flatMap(s => s.data).filter(p => isFinite(p.x) && isFinite(p.y) && (!opt.logY || p.y > 0));
+  if (!pts.length) return;
+
+  let x0 = opt.xMin ?? Math.min(...pts.map(p => p.x)), x1 = Math.max(...pts.map(p => p.x));
+  let y0 = Math.min(...pts.map(p => p.y)), y1 = Math.max(...pts.map(p => p.y));
+  if (opt.square) { x0 = y0 = Math.min(x0, y0); x1 = y1 = Math.max(x1, y1); }
+  if (x1 === x0) x1 = x0 + 1;
+  let xt = niceTicks(x0, x1, Math.max(3, Math.floor(W / 90)));
+  let yt;
+  if (opt.logY) { y0 = y0 / 1.15; y1 = y1 * 1.15; yt = logTicks(y0, y1); if (yt.length < 2) yt = [y0, y1]; }
+  else { yt = niceTicks(y0, y1, 5); y0 = Math.min(y0, yt[0]); y1 = Math.max(y1, yt[yt.length - 1]); }
+  if (!opt.xMin) { x0 = Math.min(x0, xt[0]); x1 = Math.max(x1, xt[xt.length - 1]); }
+  if (opt.square) {                     /* 실제-예측 그래프: x, y 축 범위를 같게 */
+    const t = niceTicks(Math.min(x0, y0), Math.max(x1, y1), Math.max(3, Math.floor(W / 90)));
+    x0 = y0 = Math.min(x0, y0, t[0]); x1 = y1 = Math.max(x1, y1, t[t.length - 1]);
+    xt = t; yt = niceTicks(y0, y1, 5);
+  }
+
+  g.font = `11px ${font}`;
+  const yLabW = Math.max(...yt.map(v => g.measureText(tickText(v)).width));
+  const L = 20 + yLabW + 8, R = 12, T = 10, legendH = 22, B = 40 + legendH;
+  const px = x => L + (x - x0) / (x1 - x0) * (W - L - R);
+  const py = opt.logY ? y => T + (Math.log(y1) - Math.log(y)) / (Math.log(y1) - Math.log(y0)) * (H - T - B)
+                      : y => T + (y1 - y) / (y1 - y0) * (H - T - B);
+
+  /* 격자와 눈금 */
+  g.strokeStyle = line; g.fillStyle = muted; g.lineWidth = 1;
+  g.textAlign = "right"; g.textBaseline = "middle";
+  yt.forEach(v => { const y = Math.round(py(v)) + 0.5; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.fillText(tickText(v), L - 6, y); });
+  g.textAlign = "center"; g.textBaseline = "top";
+  xt.forEach(v => { if (v < x0 || v > x1) return; const x = Math.round(px(v)) + 0.5; g.beginPath(); g.moveTo(x, T); g.lineTo(x, H - B); g.stroke(); g.fillText(tickText(v), x, H - B + 5); });
+  g.fillText(opt.xLabel, (L + W - R) / 2, H - B + 20);
+  g.save(); g.translate(11, (T + H - B) / 2); g.rotate(-Math.PI / 2); g.textBaseline = "middle"; g.fillText(opt.yLabel, 0, 0); g.restore();
+
+  /* 데이터 */
+  g.save(); g.beginPath(); g.rect(L, T, W - L - R, H - T - B); g.clip();
+  opt.series.forEach(s => {
+    const c = C(s.color), d = s.data.filter(p => isFinite(p.y) && (!opt.logY || p.y > 0));
+    g.strokeStyle = c; g.fillStyle = c;
+    if (s.type === "line" || s.type === "dash") {
+      g.lineWidth = s.type === "dash" ? 1.2 : 2; g.setLineDash(s.type === "dash" ? [6, 4] : []);
+      g.beginPath(); d.forEach((p, i) => i ? g.lineTo(px(p.x), py(p.y)) : g.moveTo(px(p.x), py(p.y))); g.stroke(); g.setLineDash([]);
+    } else if (s.type === "cross") {
+      g.lineWidth = 1.3; d.forEach(p => { const x = px(p.x), y = py(p.y); g.beginPath(); g.moveTo(x - 3, y - 3); g.lineTo(x + 3, y + 3); g.moveTo(x + 3, y - 3); g.lineTo(x - 3, y + 3); g.stroke(); });
+    } else {
+      g.globalAlpha = 0.75; d.forEach(p => { g.beginPath(); g.arc(px(p.x), py(p.y), 3.2, 0, 2 * Math.PI); g.fill(); }); g.globalAlpha = 1;
+    }
+  });
+  g.restore();
+
+  /* 범례 */
+  g.font = `12px ${font}`; g.textBaseline = "middle"; g.textAlign = "left";
+  const items = opt.series.map(s => ({ s, w: 22 + g.measureText(s.label).width + 16 }));
+  let lx = Math.max(L, (W - items.reduce((a, i) => a + i.w, 0)) / 2), ly = H - legendH / 2 - 2;
+  items.forEach(({ s, w }) => {
+    const c = C(s.color); g.strokeStyle = c; g.fillStyle = c;
+    if (s.type === "line" || s.type === "dash") { g.lineWidth = 2; g.setLineDash(s.type === "dash" ? [4, 3] : []); g.beginPath(); g.moveTo(lx, ly); g.lineTo(lx + 16, ly); g.stroke(); g.setLineDash([]); }
+    else if (s.type === "cross") { g.lineWidth = 1.3; g.beginPath(); g.moveTo(lx + 5, ly - 3); g.lineTo(lx + 11, ly + 3); g.moveTo(lx + 11, ly - 3); g.lineTo(lx + 5, ly + 3); g.stroke(); }
+    else { g.beginPath(); g.arc(lx + 8, ly, 3.5, 0, 2 * Math.PI); g.fill(); }
+    g.fillStyle = muted; g.fillText(s.label, lx + 22, ly); lx += w;
+  });
+}
+
+</script>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const NAMES = { cylinders: "실린더 수", displacement: "배기량 (in³)", horsepower: "마력 (hp)", weight: "무게 (lb)",
+  acceleration: "가속 0→60mph (초)", model_year: "연식 (19xx년)", origin: "제조 지역", mpg: "연비 (mpg)" };
+const CATS = { usa: "미국", japan: "일본", europe: "유럽" };
+const label = n => NAMES[n] || n;
+let table = null, design = null, S = null, stopFlag = false, lastResult = null;
+
+/* ---------- 데이터 ---------- */
+function readTable() {
+  const msg = $("dataMsg"); msg.className = "msg";
+  table = parseTable($("data").value);
+  if (table.error) { msg.className = "msg error"; msg.textContent = table.error; table = null; $("target").innerHTML = ""; return; }
+  const prev = $("target").value;
+  const nums = table.cols.filter(c => c.numeric).map(c => c.name);
+  $("target").innerHTML = nums.map(n => `<option value="${n}">${label(n)}</option>`).join("");
+  $("target").value = nums.includes(prev) ? prev : (nums.includes("mpg") ? "mpg" : nums[nums.length - 1]);
+  msg.textContent = `${table.rows.length}줄, 열 ${table.header.length}개를 읽었습니다.` + (table.bad ? ` 칸 수가 맞지 않는 줄 ${table.bad}개는 건너뜁니다.` : "");
+}
+function buildNow() {
+  if (!table) return null;
+  const d = buildDesign(table, $("target").value);
+  if (d.error) { $("dataMsg").className = "msg error"; $("dataMsg").textContent = d.error; return null; }
+  return d;
+}
+function loadExample() { $("data").value = $("exampleData").textContent.trim(); readTable(); refreshNet(); }
+
+/* ---------- 신경망 구조 그림 ---------- */
+function hiddenSizes() {
+  const h = $("hidden").value.split(/[,\s]+/).filter(s => s).map(Number);
+  return h.length && h.every(v => Number.isInteger(v) && v > 0 && v <= 256) ? h : null;
+}
+function refreshNet() {
+  const d = buildNow(), h = hiddenSizes();
+  if (!d || !h) { $("net").innerHTML = ""; $("netCaption").textContent = h ? "" : "은닉층 뉴런 수를 1~256 사이의 정수로 입력해 주세요."; return; }
+  const sizes = [d.nIn, ...h, 1], W = 300, H = 200, top = 16, bottom = 30, MAX = 9;
+  const xs = sizes.map((_, i) => 24 + i * (W - 48) / (sizes.length - 1));
+  const shown = sizes.map(n => Math.min(n, MAX));
+  const ys = shown.map(n => Array.from({ length: n }, (_, k) => top + (H - top - bottom) * (n === 1 ? 0.5 : k / (n - 1))));
+  let g = "";
+  for (let l = 0; l < sizes.length - 1; l++)
+    ys[l].forEach(y1 => ys[l + 1].forEach(y2 => g += `<line x1="${xs[l]}" y1="${y1}" x2="${xs[l + 1]}" y2="${y2}" stroke="var(--line)" stroke-width="0.7"/>`));
+  sizes.forEach((n, l) => {
+    const color = l === 0 ? "var(--muted)" : (l === sizes.length - 1 ? "var(--good)" : "var(--ann)");
+    ys[l].forEach((y, k) => {
+      const gap = n > MAX && k === Math.floor(MAX / 2);
+      g += gap ? `<text x="${xs[l]}" y="${y + 4}" text-anchor="middle">⋮</text>`
+               : `<circle cx="${xs[l]}" cy="${y}" r="5.5" fill="var(--node)" stroke="${color}" stroke-width="1.8"/>`;
+    });
+    const name = l === 0 ? "입력" : (l === sizes.length - 1 ? "출력" : `은닉${sizes.length > 3 ? l : ""}`);
+    g += `<text x="${xs[l]}" y="${H - 8}" text-anchor="middle">${name} ${n}</text>`;
+  });
+  $("net").innerHTML = g;
+  let params = 0; for (let l = 0; l < sizes.length - 1; l++) params += sizes[l] * sizes[l + 1] + sizes[l + 1];
+  $("netCaption").textContent = `${sizes.join(" → ")} · 학습할 가중치와 편향 ${params.toLocaleString()}개 · 은닉층 ReLU`;
+}
+
+/* ---------- 학습 ---------- */
+function readConfig() {
+  const num = id => Number($(id).value);
+  const cfg = { hidden: hiddenSizes(), lr: num("lr"), epochs: Math.round(num("epochs")), batch: Math.round(num("batch")),
+    l2: num("l2"), patience: Math.round(num("patience")), seed: Math.round(num("seed")) || 0, testRatio: num("testRatio") };
+  if (!cfg.hidden) return { error: "은닉층 뉴런 수를 1~256 사이의 정수로, 쉼표로 나눠 입력해 주세요." };
+  if (!(cfg.lr > 0) || !(cfg.epochs >= 1) || !(cfg.batch >= 1) || !(cfg.l2 >= 0) || !(cfg.patience >= 1))
+    return { error: "학습률·epoch·미니배치·조기 종료 값은 양수로 입력해 주세요." };
+  return cfg;
+}
+function setRunning(on) {
+  $("runBtn").disabled = on; $("stopBtn").disabled = !on;
+  ["data", "target", "hidden", "lr", "epochs", "batch", "l2", "patience", "seed", "testRatio", "loadBtn", "clearBtn"].forEach(id => $(id).disabled = on);
+}
+function start() {
+  const msg = $("runMsg"); msg.className = "msg"; msg.textContent = "";
+  readTable();
+  design = buildNow(); if (!design) return;
+  const cfg = readConfig();
+  if (cfg.error) { msg.className = "msg error"; msg.textContent = cfg.error; return; }
+  if (design.X.length < 10) { msg.className = "msg error"; msg.textContent = "빈칸 없는 데이터가 10줄 이상 필요합니다."; return; }
+  if (cfg.testRatio > 0 && Math.floor(design.X.length * cfg.testRatio) < 3) cfg.testRatio = 0;
+  S = prepare(design, cfg);
+  stopFlag = false; setRunning(true); initLoss();
+  const n = design.X.length, nTe = S.Xte.length;
+  msg.textContent = `데이터 ${n}개 → 학습 ${S.Xtr.length} / 검증 ${S.Xva.length} / 테스트 ${nTe}` +
+    (design.dropped ? ` (빈칸 있는 ${design.dropped}줄 제외)` : "") + (design.skipped.length ? ` · 종류가 너무 많아 뺀 열: ${design.skipped.join(", ")}` : "");
+  requestAnimationFrame(step);
+}
+function step() {
+  const t0 = performance.now();
+  while (!S.done && !stopFlag && performance.now() - t0 < 30) runEpoch(S);
+  updateLoss();
+  if (S.done || stopFlag) return end();
+  $("status").innerHTML = `<span class="pill run">학습 중</span> epoch ${S.epoch} · 최저 검증 손실 epoch ${S.bestEpoch}`;
+  requestAnimationFrame(step);
+}
+function end() {
+  setRunning(false);
+  if (S.diverged || !S.bestP) {
+    $("status").innerHTML = `<span class="pill bad">발산</span> epoch ${S.epoch}`;
+    $("runMsg").className = "msg error"; $("runMsg").textContent = "손실이 발산했습니다. 학습률을 더 작게 바꿔 보세요."; return;
+  }
+  const why = stopFlag ? `<span class="pill stop">중지</span>` : (S.stoppedEarly ? `<span class="pill done">조기 종료</span>` : `<span class="pill done">완료</span>`);
+  $("status").innerHTML = `${why} ${S.epoch} epoch 학습 · ${S.bestEpoch} epoch 가중치 사용`;
+  const r = finish(S);
+  showResult(r); drawScatter(r); buildPredictForm(); predict();
+}
+
+/* ---------- 결과 표시 ---------- */
+function showResult(r) {
+  const f = (v, d) => v.toFixed(d), u = $("target").value === "mpg" ? " mpg" : "";
+  const best = (a, b, hi) => hi ? (a >= b) : (a <= b);
+  const row = (name, color, m, o) => `<tr><td><span class="swatch" style="background:${color}"></span>${name}</td>
+    <td class="${best(m.r2, o.r2, true) ? "win" : ""}">${f(m.r2, 3)}</td>
+    <td class="${best(m.rmse, o.rmse) ? "win" : ""}">${f(m.rmse, 2)}${u}</td>
+    <td class="${best(m.mae, o.mae) ? "win" : ""}">${f(m.mae, 2)}${u}</td></tr>`;
+  $("resultBody").innerHTML = row("인공신경망 (MLP)", "var(--ann)", r.ann, r.lin) + row("다중 선형회귀", "var(--lin)", r.lin, r.ann);
+  $("evalNote").textContent = r.onTest ? `테스트 데이터 ${r.truth.length}개 기준` : `검증 데이터 ${r.truth.length}개 기준`;
+}
+function initLoss() { lastResult = null; drawLoss(); clearCanvas("scatterChart"); }
+function clearCanvas(id) { const c = $(id); c.getContext("2d").clearRect(0, 0, c.width, c.height); }
+function updateLoss() { drawLoss(); }
+function drawLoss() {
+  if (!S) return;
+  plot($("lossChart"), { xLabel: "epoch", yLabel: "MSE (로그 스케일)", logY: true, xMin: 1, series: [
+    { label: "학습 손실", color: "--ann", type: "line", data: S.hTr.map((y, i) => ({ x: i + 1, y })) },
+    { label: "검증 손실", color: "--val", type: "line", data: S.hVa.map((y, i) => ({ x: i + 1, y })) }
+  ] });
+}
+function drawScatter(r) {
+  lastResult = r;
+  const lo = Math.min(...r.truth), hi = Math.max(...r.truth), name = label($("target").value);
+  plot($("scatterChart"), { xLabel: `실제 ${name}`, yLabel: `예측 ${name}`, square: true, series: [
+    { label: `선형회귀 R²=${r.lin.r2.toFixed(3)}`, color: "--lin", type: "cross", data: r.truth.map((t, i) => ({ x: t, y: r.linP[i] })) },
+    { label: `신경망 R²=${r.ann.r2.toFixed(3)}`, color: "--ann", type: "points", data: r.truth.map((t, i) => ({ x: t, y: r.annP[i] })) },
+    { label: "y = x", color: "--lin", type: "dash", data: [{ x: lo, y: lo }, { x: hi, y: hi }] }
+  ] });
+}
+function redrawAll() { drawLoss(); if (lastResult) drawScatter(lastResult); }
+window.addEventListener("resize", redrawAll);
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll); } catch (e) {}
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ---------- 값 예측 ---------- */
+function buildPredictForm() {
+  const box = $("predInputs"), keep = {};
+  box.querySelectorAll("[data-name]").forEach(el => keep[el.dataset.name] = el.value);
+  box.innerHTML = design.spec.map((s, k) => {
+    const id = "p_" + k, v = keep[s.name] ?? s.def;
+    if (s.type === "cat") return `<div><label for="${id}">${label(s.name)}</label><select id="${id}" data-name="${s.name}">` +
+      s.cats.map(c => `<option value="${c}" ${c === v ? "selected" : ""}>${CATS[c] || c}</option>`).join("") + `</select></div>`;
+    return `<div><label for="${id}">${label(s.name)}</label><input id="${id}" data-name="${s.name}" type="number" step="any" value="${v}" placeholder="${s.min}~${s.max}"></div>`;
+  }).join("");
+}
+function predict(e) {
+  if (e) e.preventDefault();
+  const out = $("predOut");
+  if (!S || !S.predictOne) { out.innerHTML = `<p class="hint">먼저 학습 시작을 눌러 주세요.</p>`; return; }
+  const vals = design.spec.map((s, k) => $("p_" + k).value);
+  if (design.spec.some((s, k) => s.type === "num" && !isFinite(parseFloat(vals[k])))) { out.innerHTML = `<p class="msg error">모든 칸에 숫자를 입력해 주세요.</p>`; return; }
+  const p = S.predictOne(encode(design.spec, vals));
+  const isMpg = $("target").value === "mpg";
+  const unit = isMpg ? "mpg" : "", kmL = v => isMpg ? `<div class="u">약 ${(v * 0.4251).toFixed(1)} km/L</div>` : "";
+  out.innerHTML = `<div class="pred-card ann"><div class="k">인공신경망 예측</div><div class="v">${p.ann.toFixed(1)} <span class="u">${unit}</span></div>${kmL(p.ann)}</div>
+    <div class="pred-card lin"><div class="k">다중 선형회귀 예측</div><div class="v">${p.lin.toFixed(1)} <span class="u">${unit}</span></div>${kmL(p.lin)}</div>`;
+}
+
+/* ---------- 이벤트 ---------- */
+$("loadBtn").addEventListener("click", loadExample);
+$("clearBtn").addEventListener("click", () => { $("data").value = ""; $("target").innerHTML = ""; table = null; $("dataMsg").textContent = ""; refreshNet(); });
+$("data").addEventListener("change", () => { readTable(); refreshNet(); });
+$("target").addEventListener("change", refreshNet);
+$("hidden").addEventListener("input", refreshNet);
+$("runBtn").addEventListener("click", start);
+$("stopBtn").addEventListener("click", () => stopFlag = true);
+$("predForm").addEventListener("submit", predict);
+
+/* 처음 열면 예제 데이터로 바로 한 번 학습해서 보여 줌 */
+loadExample();
+start();
+</script>
+
+</body>
+</html>
