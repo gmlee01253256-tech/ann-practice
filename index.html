@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>인공신경망 연비 예측 실습</title>
+<title>인공신경망 데이터 예측</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -103,6 +103,32 @@
   .pred-card .u { font-size: 0.85rem; color: var(--muted); }
   .pred-card.ann .v { color: var(--ann); }
   .pred-card.lin .v { color: var(--lin); font-size: 1.25rem; }
+  .drop {
+    display: grid; place-items: center; text-align: center; gap: 4px; cursor: pointer;
+    border: 1.5px dashed var(--muted); border-radius: 8px; padding: 18px 12px; background: var(--field);
+  }
+  .drop:hover, .drop.over { border-color: var(--ann); background: var(--grid); }
+  .drop b { font-size: 0.95rem; }
+  .drop span { font-size: 0.8rem; color: var(--muted); }
+  .drop:focus-within { outline: 3px solid var(--focus); outline-offset: 1px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  details { margin-top: 12px; font-size: 0.88rem; }
+  summary { cursor: pointer; color: var(--muted); }
+  details textarea { margin-top: 8px; height: 120px; }
+  details button { margin-top: 8px; font-size: 0.85rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-weight: 400; font-size: 0.82rem;
+    border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px 3px 7px; cursor: pointer; background: var(--field); }
+  .chip input { width: auto; margin: 0; accent-color: var(--ann); }
+  .chip.off { opacity: 0.5; cursor: not-allowed; }
+  .chip:has(input:checked) { border-color: var(--ann); }
+  .preview { overflow-x: auto; max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .preview table { font-size: 0.8rem; }
+  .preview th, .preview td { text-align: left; padding: 5px 10px; }
+  .preview th { position: sticky; top: 0; background: var(--panel); color: var(--ink); font-weight: 500; }
+  .preview th small { display: block; font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+  .preview th.tgt { color: var(--good); }
+  .preview td.num { text-align: right; font-variant-numeric: tabular-nums; }
   footer { max-width: 1180px; margin: 0 auto; padding-block: 0 32px; font-size: 0.8rem; color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -111,24 +137,43 @@
 
 
 <header>
-  <h1>인공신경망 연비 예측 실습</h1>
-  <p>데이터를 넣고 <b>학습 시작</b>을 누르면 다층 신경망(MLP)이 브라우저 안에서 순전파 → 역전파 → 경사하강법을 반복하며 학습합니다. 학습이 끝나면 다중 선형회귀와 성능을 비교하고, 새 값을 넣어 예측할 수 있습니다.</p>
+  <h1>인공신경망 데이터 예측</h1>
+  <p>엑셀 표를 올리고 <b>학습 시작</b>을 누르면 다층 신경망(MLP)이 브라우저 안에서 순전파 → 역전파 → 경사하강법을 반복하며 학습합니다. 학습이 끝나면 다중 선형회귀와 성능을 비교하고, 새 값을 넣어 예측할 수 있습니다.</p>
 </header>
 
 <main>
   <div class="col">
     <section>
       <h2>데이터 입력</h2>
-      <div class="btns" style="margin-top:0">
-        <button type="button" id="loadBtn">예제 불러오기 (Auto MPG)</button>
+      <label class="drop" id="drop" for="file">
+        <b>엑셀 파일 올리기</b>
+        <span>.xlsx 또는 .csv 파일을 끌어다 놓거나 눌러서 고르세요</span>
+        <input type="file" id="file" class="visually-hidden" accept=".xlsx,.csv,.tsv,.txt">
+      </label>
+      <p class="hint">첫 줄은 열 이름이어야 합니다. 글자로 된 열(예: 지역, 성별)은 원-핫 인코딩으로 바꿔서 씁니다.</p>
+      <div id="sheetBox" hidden>
+        <label for="sheet">시트</label>
+        <select id="sheet"></select>
+      </div>
+      <div class="btns">
+        <button type="button" id="loadBtn">예제 불러오기 (자동차 연비)</button>
         <button type="button" id="clearBtn">비우기</button>
       </div>
-      <label for="data">CSV 데이터 (첫 줄은 열 이름)</label>
-      <textarea id="data" spellcheck="false"></textarea>
-      <p class="hint">쉼표나 탭으로 구분합니다. 글자로 된 열(예: 제조 지역)은 원-핫 인코딩으로 바꿔서 입력에 씁니다.</p>
-      <label for="target">예측할 열 (출력 y)</label>
-      <select id="target"></select>
+      <details>
+        <summary>엑셀에서 복사해서 붙여넣기</summary>
+        <textarea id="data" spellcheck="false" placeholder="엑셀에서 열 이름까지 포함해 표를 복사한 뒤 여기에 붙여넣으세요."></textarea>
+        <button type="button" id="pasteBtn">붙여넣은 표 사용</button>
+      </details>
       <p class="msg" id="dataMsg"></p>
+    </section>
+
+    <section>
+      <h2>예측할 열과 입력 열</h2>
+      <label for="target">예측할 열 (출력 y, 숫자 열만)</label>
+      <select id="target"></select>
+      <label>입력으로 쓸 열 (x)</label>
+      <div class="chips" id="chips"><span class="hint">표를 올리면 열 목록이 나옵니다.</span></div>
+      <p class="hint" id="chipNote"></p>
     </section>
 
     <section>
@@ -166,6 +211,11 @@
 
   <div class="col">
     <section>
+      <h2>데이터 미리보기 <small id="previewInfo"></small></h2>
+      <div class="preview" id="preview"><p class="hint" style="padding:10px">아직 표가 없습니다.</p></div>
+    </section>
+
+    <section>
       <h2>학습 손실 변화 <small class="status" id="status"></small></h2>
       <div class="chart-box"><canvas id="lossChart"></canvas></div>
       <p class="hint">표준화된 값 기준 MSE (로그 스케일). 검증 손실이 더 줄지 않으면 조기 종료하고, 검증 손실이 가장 낮았던 epoch의 가중치를 씁니다.</p>
@@ -198,7 +248,7 @@
     </section>
   </div>
 </main>
-<footer>데이터: Quinlan, R. (1993). Auto MPG [Dataset]. UCI Machine Learning Repository. · 신경망과 그래프 모두 외부 라이브러리 없이 JavaScript로 직접 구현했습니다.</footer>
+<footer>예제 데이터: Quinlan, R. (1993). Auto MPG [Dataset]. UCI Machine Learning Repository. · 올린 파일은 이 브라우저 안에서만 읽고 어디에도 보내지 않습니다. 엑셀 읽기·신경망·그래프 모두 외부 라이브러리 없이 JavaScript로 직접 구현했습니다.</footer>
 
 <script type="text/plain" id="exampleData">cylinders,displacement,horsepower,weight,acceleration,model_year,origin,mpg
 8,307.0,130.0,3504,12.0,70,usa,18.0
@@ -594,6 +644,151 @@
 4,120.0,79.0,2625,18.6,82,usa,28.0
 4,119.0,82.0,2720,19.4,82,usa,31.0</script>
 <script>
+/* ===== 표 데이터 읽기: 엑셀(.xlsx) · CSV · 붙여넣기 (외부 라이브러리 없음) ===== */
+
+/* 숫자로 읽을 수 있으면 숫자, 아니면 NaN.  "1,234" 같은 천 단위 쉼표도 허용 */
+function toNum(v) {
+  if (typeof v === "number") return v;
+  const s = String(v).trim();
+  if (/^[-+]?(\d{1,3}(,\d{3})+|\d*)(\.\d+)?([eE][-+]?\d+)?$/.test(s) && /\d/.test(s)) return Number(s.replace(/,/g, ""));
+  return NaN;
+}
+const isMissing = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "" || s === "?" || s === "na" || s === "nan" || s === "-" || s === "#n/a"; };
+
+/* 2차원 배열 → 표.  첫 번째로 비어 있지 않은 줄을 열 이름으로 쓰고, 빈 줄·빈 열은 지움 */
+function tableFromRows(rows) {
+  rows = rows.map(r => r.map(v => v == null ? "" : (typeof v === "number" ? v : String(v).trim())))
+             .filter(r => r.some(v => v !== ""));
+  if (rows.length < 3) return { error: "열 이름 1줄과 데이터 2줄 이상이 필요합니다." };
+  const width = Math.max(...rows.map(r => r.length));
+  rows = rows.map(r => { const c = r.slice(); while (c.length < width) c.push(""); return c; });
+  const keep = [...Array(width).keys()].filter(j => rows.some(r => r[j] !== ""));
+  rows = rows.map(r => keep.map(j => r[j]));
+  const used = {};
+  const header = rows[0].map((h, j) => {
+    let name = String(h).trim() || `열 ${j + 1}`;
+    if (used[name]) name += ` (${++used[name]})`; else used[name] = 1;
+    return name;
+  });
+  const body = rows.slice(1);
+  const cols = header.map((name, j) => {
+    const vals = body.map(r => r[j]).filter(v => !isMissing(v));
+    const numeric = vals.length > 0 && vals.every(v => isFinite(toNum(v)));
+    const cats = numeric ? null : [...new Set(vals.map(String))].sort();
+    return { name, numeric, cats, filled: vals.length };
+  });
+  return { header, rows: body, cols, bad: 0, missing: isMissing };
+}
+
+/* CSV / TSV 글자 → 2차원 배열 (따옴표 안의 쉼표·줄바꿈 처리) */
+function parseDelimited(text) {
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/, 1)[0];
+  const sep = first.includes("\t") ? "\t" : (first.includes(";") && !first.includes(",") ? ";" : ",");
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"' && cell === "") q = true;
+    else if (ch === sep) { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+/* 파일 글자 인코딩: UTF-8이 아니면 한글 엑셀이 저장하는 CP949(EUC-KR)로 읽음 */
+function decodeText(buf) {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+  catch (e) { return new TextDecoder("euc-kr").decode(buf); }
+}
+
+/* ---------- .xlsx 읽기: xlsx 파일은 XML 파일들을 묶은 zip ---------- */
+async function unzip(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), files = {};
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--)
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("zip");
+  let p = dv.getUint32(eocd + 16, true);
+  const count = dv.getUint16(eocd + 10, true);
+  for (let k = 0; k < count; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const off = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nlen));
+    const start = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true);
+    files[name] = { method, data: u8.subarray(start, start + csize) };
+    p += 46 + nlen + elen + clen;
+  }
+  return async name => {
+    const f = files[name]; if (!f) return null;
+    if (f.method === 0) return new TextDecoder().decode(f.data);
+    const stream = new Blob([f.data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return await new Response(stream).text();
+  };
+}
+const xmlDoc = s => new DOMParser().parseFromString(s, "application/xml");
+const colIndex = ref => { let n = 0; for (const ch of ref.replace(/\d+/g, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+
+async function readXlsx(buf) {
+  const get = await unzip(buf);
+  const wb = await get("xl/workbook.xml");
+  if (!wb) throw new Error("xlsx");
+  const rels = xmlDoc(await get("xl/_rels/workbook.xml.rels") || "<r/>");
+  const target = {};
+  for (const r of rels.getElementsByTagName("Relationship")) target[r.getAttribute("Id")] = r.getAttribute("Target");
+  const ssXml = await get("xl/sharedStrings.xml");
+  const shared = ssXml ? [...xmlDoc(ssXml).getElementsByTagName("si")].map(si => [...si.getElementsByTagName("t")].map(t => t.textContent).join("")) : [];
+  const sheets = [];
+  for (const s of xmlDoc(wb).getElementsByTagName("sheet")) {
+    const id = s.getAttribute("r:id") || s.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+    let path = target[id] || "";
+    path = path.startsWith("/") ? path.slice(1) : "xl/" + path.replace(/^\.\//, "");
+    const xml = await get(path); if (!xml) continue;
+    const rows = [];
+    for (const r of xmlDoc(xml).getElementsByTagName("row")) {
+      const ri = Number(r.getAttribute("r") || rows.length + 1) - 1, row = [];
+      let auto = 0;
+      for (const c of r.getElementsByTagName("c")) {
+        const ref = c.getAttribute("r"), j = ref ? colIndex(ref) : auto; auto = j + 1;
+        const t = c.getAttribute("t"), v = c.getElementsByTagName("v")[0]?.textContent;
+        let val = "";
+        if (t === "s") val = shared[Number(v)] ?? "";
+        else if (t === "inlineStr") val = [...c.getElementsByTagName("t")].map(x => x.textContent).join("");
+        else if (t === "str") val = v ?? "";
+        else if (t === "b") val = v === "1" ? 1 : 0;
+        else if (t === "e") val = "";
+        else if (v != null && v !== "") val = Number(v);
+        row[j] = val;
+      }
+      rows[ri] = Array.from(row, v => v ?? "");
+    }
+    sheets.push({ name: s.getAttribute("name"), rows: Array.from(rows, r => r || []) });
+  }
+  if (!sheets.length) throw new Error("xlsx");
+  return sheets;
+}
+
+/* 파일 하나를 읽어 시트 목록으로 돌려줌 */
+async function readFileAsSheets(file) {
+  const name = file.name.toLowerCase(), buf = await file.arrayBuffer();
+  const head = new Uint8Array(buf.slice(0, 4));
+  if (head[0] === 0x50 && head[1] === 0x4b) {                     /* "PK" = zip → xlsx */
+    try { return await readXlsx(buf); }
+    catch (e) { throw new Error("엑셀 파일을 읽지 못했습니다. 엑셀에서 열어 .xlsx로 다시 저장한 뒤 올려 주세요."); }
+  }
+  if (head[0] === 0xd0 && head[1] === 0xcf || name.endsWith(".xls"))
+    throw new Error("예전 엑셀 형식(.xls)은 읽을 수 없습니다. 엑셀에서 '다른 이름으로 저장' → 'Excel 통합 문서(.xlsx)'로 저장해 주세요.");
+  return [{ name: file.name, rows: parseDelimited(decodeText(buf)) }];
+}
+
 /* ===== 인공신경망 핵심 코드 (Python ann_predict.py 와 같은 알고리즘) ===== */
 
 /* 시드 고정 난수: 실행할 때마다 같은 결과가 나오게 함 */
@@ -617,60 +812,38 @@ function shuffled(n, rand) {
   return idx;
 }
 
-/* ---------- 데이터 읽기 ---------- */
-function parseTable(text) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
-  if (lines.length < 2) return { error: "첫 줄에 열 이름, 그 아래에 데이터를 2줄 이상 넣어 주세요." };
-  const sep = lines[0].includes(",") ? "," : (lines[0].includes("\t") ? "\t" : /\s+/);
-  const header = lines[0].split(sep).map(s => s.trim());
-  const rows = [];
-  let bad = 0;
-  for (let i = 1; i < lines.length; i++) {
-    const c = lines[i].split(sep).map(s => s.trim());
-    if (c.length !== header.length) { bad++; continue; }
-    rows.push(c);
-  }
-  const missing = v => v === "" || v === "?" || v.toLowerCase() === "na" || v.toLowerCase() === "nan";
-  const cols = header.map((name, j) => {
-    const vals = rows.map(r => r[j]).filter(v => !missing(v));
-    const numeric = vals.length > 0 && vals.every(v => isFinite(Number(v)));
-    const cats = numeric ? null : [...new Set(vals)].sort();
-    return { name, numeric, cats };
-  });
-  return { header, rows, cols, bad, missing };
-}
-
-/* 표 → 입력 행렬 X, 출력 y.  글자 열은 원-핫 인코딩, 종류가 너무 많은 글자 열(이름 등)은 제외 */
-function buildDesign(table, target) {
+/* ---------- 표 → 입력 행렬 X, 출력 y ----------
+   use: 입력으로 쓸 열 이름 목록. 글자 열은 원-핫 인코딩, 종류가 너무 많은 글자 열(이름 등)은 쓸 수 없음 */
+const MAX_CATS = 20;
+function usableAsInput(c) { return c.numeric || (c.cats && c.cats.length >= 2 && c.cats.length <= MAX_CATS); }
+function buildDesign(table, target, use) {
   const ti = table.header.indexOf(target);
   if (ti < 0 || !table.cols[ti].numeric) return { error: "예측할 열은 숫자 열이어야 합니다." };
-  const spec = [], skipped = [];
+  const spec = [];
   table.cols.forEach((c, j) => {
-    if (j === ti) return;
-    if (c.numeric) spec.push({ name: c.name, j, type: "num" });
-    else if (c.cats.length <= 12) spec.push({ name: c.name, j, type: "cat", cats: c.cats });
-    else skipped.push(c.name);
+    if (j === ti || (use && !use.includes(c.name)) || !usableAsInput(c)) return;
+    spec.push(c.numeric ? { name: c.name, j, type: "num" } : { name: c.name, j, type: "cat", cats: c.cats });
   });
-  if (!spec.length) return { error: "입력으로 쓸 수 있는 열이 없습니다." };
+  if (!spec.length) return { error: "입력으로 쓸 열을 하나 이상 골라 주세요." };
   const X = [], y = [];
   let dropped = 0;
   for (const r of table.rows) {
     if (table.missing(r[ti]) || spec.some(s => table.missing(r[s.j]))) { dropped++; continue; }
     X.push(encode(spec, spec.map(s => r[s.j])));
-    y.push(Number(r[ti]));
+    y.push(toNum(r[ti]));
   }
   spec.forEach(s => {                       /* 예측 입력창 기본값: 숫자는 중앙값, 글자는 최빈값 */
     const v = table.rows.map(r => r[s.j]).filter(v => !table.missing(v));
-    if (s.type === "num") { const a = v.map(Number).sort((p, q) => p - q); s.def = a[Math.floor(a.length / 2)]; s.min = a[0]; s.max = a[a.length - 1]; }
+    if (s.type === "num") { const a = v.map(toNum).sort((p, q) => p - q); s.def = a[Math.floor(a.length / 2)]; s.min = a[0]; s.max = a[a.length - 1]; }
     else { const cnt = {}; v.forEach(x => cnt[x] = (cnt[x] || 0) + 1); s.def = Object.keys(cnt).sort((p, q) => cnt[q] - cnt[p])[0]; }
   });
-  return { X, y, spec, skipped, dropped, nIn: X[0] ? X[0].length : 0 };
+  return { X, y, spec, dropped, nIn: X[0] ? X[0].length : 0 };
 }
 function encode(spec, values) {
   const out = [];
   spec.forEach((s, k) => {
-    if (s.type === "num") out.push(Number(values[k]));
-    else s.cats.forEach(c => out.push(values[k] === c ? 1 : 0));   /* 원-핫 */
+    if (s.type === "num") out.push(toNum(values[k]));
+    else s.cats.forEach(c => out.push(String(values[k]) === c ? 1 : 0));   /* 원-핫 */
   });
   return out;
 }
@@ -821,6 +994,7 @@ function finish(S) {
   return S.result;
 }
 
+if (typeof module !== "undefined") module.exports = { buildDesign, usableAsInput, encode, prepare, runEpoch, finish };
 
 /* ===== 간단한 캔버스 그래프 (외부 라이브러리 없이 직접 그림) ===== */
 function niceTicks(lo, hi, count) {
@@ -860,7 +1034,8 @@ function plot(canvas, opt) {
   if (!opt.xMin) { x0 = Math.min(x0, xt[0]); x1 = Math.max(x1, xt[xt.length - 1]); }
   if (opt.square) {                     /* 실제-예측 그래프: x, y 축 범위를 같게 */
     const t = niceTicks(Math.min(x0, y0), Math.max(x1, y1), Math.max(3, Math.floor(W / 90)));
-    x0 = y0 = Math.min(x0, y0, t[0]); x1 = y1 = Math.max(x1, y1, t[t.length - 1]);
+    const pad = (Math.max(x1, y1) - Math.min(x0, y0)) * 0.03;
+    x0 = y0 = Math.min(x0 - pad, y0 - pad, t[0]); x1 = y1 = Math.max(x1 + pad, y1 + pad, t[t.length - 1]);
     xt = t; yt = niceTicks(y0, y1, 5);
   }
 
@@ -917,26 +1092,69 @@ const NAMES = { cylinders: "실린더 수", displacement: "배기량 (in³)", ho
   acceleration: "가속 0→60mph (초)", model_year: "연식 (19xx년)", origin: "제조 지역", mpg: "연비 (mpg)" };
 const CATS = { usa: "미국", japan: "일본", europe: "유럽" };
 const label = n => NAMES[n] || n;
-let table = null, design = null, S = null, stopFlag = false, lastResult = null;
+let table = null, sheets = null, sourceName = "", design = null, S = null, stopFlag = false, lastResult = null;
+const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /* ---------- 데이터 ---------- */
-function readTable() {
-  const msg = $("dataMsg"); msg.className = "msg";
-  table = parseTable($("data").value);
-  if (table.error) { msg.className = "msg error"; msg.textContent = table.error; table = null; $("target").innerHTML = ""; return; }
-  const prev = $("target").value;
-  const nums = table.cols.filter(c => c.numeric).map(c => c.name);
-  $("target").innerHTML = nums.map(n => `<option value="${n}">${label(n)}</option>`).join("");
-  $("target").value = nums.includes(prev) ? prev : (nums.includes("mpg") ? "mpg" : nums[nums.length - 1]);
-  msg.textContent = `${table.rows.length}줄, 열 ${table.header.length}개를 읽었습니다.` + (table.bad ? ` 칸 수가 맞지 않는 줄 ${table.bad}개는 건너뜁니다.` : "");
+function dataMsg(text, error) { $("dataMsg").className = error ? "msg error" : "msg"; $("dataMsg").textContent = text; }
+function setSheets(list, name) {
+  sheets = list; sourceName = name;
+  $("sheet").innerHTML = list.map((s, i) => `<option value="${i}">${esc(s.name)}</option>`).join("");
+  $("sheetBox").hidden = list.length < 2;
+  /* 설명만 있는 시트는 건너뛰고, 숫자 열이 있는 첫 시트를 고름 */
+  const first = list.findIndex(s => { const t = tableFromRows(s.rows); return !t.error && t.cols.some(c => c.numeric); });
+  $("sheet").value = String(Math.max(0, first));
+  useSheet(Math.max(0, first));
+}
+function useSheet(i) {
+  const t = tableFromRows(sheets[i].rows);
+  if (t.error) { table = null; dataMsg(`${sheets[i].name}: ${t.error}`, true); renderAll(); return; }
+  table = t;
+  const nums = t.cols.filter(c => c.numeric).map(c => c.name);
+  if (!nums.length) { table = null; dataMsg("숫자로 된 열이 없어서 예측할 수 없습니다.", true); renderAll(); return; }
+  $("target").innerHTML = nums.map(n => `<option value="${esc(n)}">${esc(label(n))}</option>`).join("");
+  $("target").value = nums.includes("mpg") ? "mpg" : nums[nums.length - 1];
+  dataMsg(`${sourceName}${sheets.length > 1 ? " · " + sheets[i].name : ""}: ${t.rows.length}행 × ${t.header.length}열을 읽었습니다.`);
+  renderAll(true);
+}
+function renderAll(resetChips) { renderChips(resetChips); renderPreview(); refreshNet(); }
+function renderChips(reset) {
+  const box = $("chips");
+  if (!table) { box.innerHTML = `<span class="hint">표를 올리면 열 목록이 나옵니다.</span>`; $("chipNote").textContent = ""; return; }
+  const prev = reset ? null : new Set(getUse());
+  const target = $("target").value, bad = [];
+  box.innerHTML = table.cols.filter(c => c.name !== target).map((c, k) => {
+    const ok = usableAsInput(c);
+    if (!ok) bad.push(c.name);
+    const on = ok && (prev ? prev.has(c.name) || c.name === box.dataset.target : true);   /* 예측할 열을 바꾸면 이전 예측 열은 입력으로 돌림 */
+    return `<label class="chip ${ok ? "" : "off"}" title="${ok ? (c.numeric ? "숫자 열" : `글자 열 · ${c.cats.length}종류 → 원-핫`) : "글자 종류가 너무 많거나 1종류뿐이라 쓸 수 없음"}">
+      <input type="checkbox" data-col="${esc(c.name)}" ${on ? "checked" : ""} ${ok ? "" : "disabled"}>${esc(label(c.name))}</label>`;
+  }).join("");
+  box.dataset.target = target;
+  $("chipNote").textContent = bad.length ? `회색 열은 글자 종류가 ${MAX_CATS}개를 넘거나(이름·번호 등) 값이 한 종류뿐이라 입력으로 쓸 수 없습니다.` : "";
+}
+function getUse() { return [...$("chips").querySelectorAll("input:checked")].map(i => i.dataset.col); }
+function renderPreview() {
+  if (!table) { $("preview").innerHTML = `<p class="hint" style="padding:10px">아직 표가 없습니다.</p>`; $("previewInfo").textContent = ""; return; }
+  const target = $("target").value, show = table.rows.slice(0, 8);
+  const head = table.cols.map(c => `<th class="${c.name === target ? "tgt" : ""}">${esc(label(c.name))}<small>${c.name === target ? "예측할 열" : (c.numeric ? "숫자" : `글자 ${c.cats.length}종류`)}</small></th>`).join("");
+  const body = show.map(r => "<tr>" + r.map((v, j) => `<td class="${table.cols[j].numeric ? "num" : ""}">${esc(v)}</td>`).join("") + "</tr>").join("");
+  $("preview").innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $("previewInfo").textContent = `전체 ${table.rows.length}행 × ${table.header.length}열 중 ${show.length}행`;
+}
+async function openFile(file) {
+  if (!file) return;
+  dataMsg(`${file.name} 읽는 중...`);
+  try { setSheets(await readFileAsSheets(file), file.name); }
+  catch (e) { table = null; renderAll(); dataMsg(e.message, true); }
 }
 function buildNow() {
   if (!table) return null;
-  const d = buildDesign(table, $("target").value);
-  if (d.error) { $("dataMsg").className = "msg error"; $("dataMsg").textContent = d.error; return null; }
+  const d = buildDesign(table, $("target").value, getUse());
+  if (d.error) { dataMsg(d.error, true); return null; }
   return d;
 }
-function loadExample() { $("data").value = $("exampleData").textContent.trim(); readTable(); refreshNet(); }
+function loadExample() { setSheets([{ name: "Auto MPG", rows: parseDelimited($("exampleData").textContent.trim()) }], "예제 데이터"); }
 
 /* ---------- 신경망 구조 그림 ---------- */
 function hiddenSizes() {
@@ -980,12 +1198,13 @@ function readConfig() {
 }
 function setRunning(on) {
   $("runBtn").disabled = on; $("stopBtn").disabled = !on;
-  ["data", "target", "hidden", "lr", "epochs", "batch", "l2", "patience", "seed", "testRatio", "loadBtn", "clearBtn"].forEach(id => $(id).disabled = on);
+  ["file", "sheet", "data", "pasteBtn", "target", "hidden", "lr", "epochs", "batch", "l2", "patience", "seed", "testRatio", "loadBtn", "clearBtn"].forEach(id => $(id).disabled = on);
+  $("chips").querySelectorAll("input").forEach(i => { if (on) { i.dataset.was = i.disabled; i.disabled = true; } else i.disabled = i.dataset.was === "true"; });
+  $("drop").style.pointerEvents = on ? "none" : "";
 }
 function start() {
   const msg = $("runMsg"); msg.className = "msg"; msg.textContent = "";
-  readTable();
-  design = buildNow(); if (!design) return;
+  design = buildNow(); if (!design) { if (!table) { $("runMsg").className = "msg error"; $("runMsg").textContent = "먼저 엑셀 파일을 올리거나 예제를 불러와 주세요."; } return; }
   const cfg = readConfig();
   if (cfg.error) { msg.className = "msg error"; msg.textContent = cfg.error; return; }
   if (design.X.length < 10) { msg.className = "msg error"; msg.textContent = "빈칸 없는 데이터가 10줄 이상 필요합니다."; return; }
@@ -994,7 +1213,7 @@ function start() {
   stopFlag = false; setRunning(true); initLoss();
   const n = design.X.length, nTe = S.Xte.length;
   msg.textContent = `데이터 ${n}개 → 학습 ${S.Xtr.length} / 검증 ${S.Xva.length} / 테스트 ${nTe}` +
-    (design.dropped ? ` (빈칸 있는 ${design.dropped}줄 제외)` : "") + (design.skipped.length ? ` · 종류가 너무 많아 뺀 열: ${design.skipped.join(", ")}` : "");
+    (design.dropped ? ` (쓰는 열에 빈칸이 있는 ${design.dropped}행 제외)` : "");
   requestAnimationFrame(step);
 }
 function step() {
@@ -1078,9 +1297,22 @@ function predict(e) {
 
 /* ---------- 이벤트 ---------- */
 $("loadBtn").addEventListener("click", loadExample);
-$("clearBtn").addEventListener("click", () => { $("data").value = ""; $("target").innerHTML = ""; table = null; $("dataMsg").textContent = ""; refreshNet(); });
-$("data").addEventListener("change", () => { readTable(); refreshNet(); });
-$("target").addEventListener("change", refreshNet);
+$("clearBtn").addEventListener("click", () => { table = null; sheets = null; $("target").innerHTML = ""; $("sheetBox").hidden = true; $("file").value = ""; dataMsg(""); renderAll(); });
+$("file").addEventListener("change", e => openFile(e.target.files[0]));
+const drop = $("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => openFile(e.dataTransfer.files[0]));
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => { e.preventDefault(); if (e.target.closest && !e.target.closest("#drop") && !$("runBtn").disabled) openFile(e.dataTransfer.files[0]); });
+$("sheet").addEventListener("change", e => useSheet(Number(e.target.value)));
+$("pasteBtn").addEventListener("click", () => {
+  const text = $("data").value.trim();
+  if (!text) { dataMsg("붙여넣은 내용이 없습니다.", true); return; }
+  setSheets([{ name: "붙여넣은 표", rows: parseDelimited(text) }], "붙여넣은 표");
+});
+$("target").addEventListener("change", () => renderAll(false));
+$("chips").addEventListener("change", refreshNet);
 $("hidden").addEventListener("input", refreshNet);
 $("runBtn").addEventListener("click", start);
 $("stopBtn").addEventListener("click", () => stopFlag = true);
